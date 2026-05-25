@@ -7,7 +7,6 @@ import {
   pendingQuestionRequestsQuery,
   projectDetailQuery,
   projectListQuery,
-  sessionDetailQuery,
 } from "@/web/lib/api/queries";
 
 export const SSEEventListeners: FC<PropsWithChildren> = ({ children }) => {
@@ -23,8 +22,21 @@ export const SSEEventListeners: FC<PropsWithChildren> = ({ children }) => {
   });
 
   useServerEventListener("sessionChanged", (event) => {
+    // sessionDetailQuery's queryKey includes a 5th element (tail/since/until
+    // options object). Plain prefix invalidate would only match queries built
+    // with identical options — match the first 4 elements via predicate instead
+    // so all variants (tail=200, tail=1000, custom range, ...) get invalidated.
     void queryClient.invalidateQueries({
-      queryKey: sessionDetailQuery(event.projectId, event.sessionId).queryKey,
+      predicate: (query) => {
+        const k = query.queryKey;
+        return (
+          Array.isArray(k) &&
+          k[0] === "projects" &&
+          k[1] === event.projectId &&
+          k[2] === "sessions" &&
+          k[3] === event.sessionId
+        );
+      },
     });
   });
 
