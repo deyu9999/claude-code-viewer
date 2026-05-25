@@ -247,6 +247,9 @@ const SessionPageMainContent: FC<
   const scrollSettleRafIdRef = useRef<number | null>(null);
   const isNearBottomRef = useRef(true);
   const hadVirtualMessageRef = useRef(false);
+  // Tracks whether we've performed the one-time "scroll to bottom on open"
+  // for the currently-loaded view. Reset when sessionId or loadOptions change.
+  const hasScrolledOnLoadRef = useRef(false);
 
   const scrollToBottomSettled = useCallback((frames: number) => {
     const scrollContainer = scrollContainerRef.current;
@@ -282,6 +285,25 @@ const SessionPageMainContent: FC<
       return response.json();
     },
   });
+
+  // Reset the "scroll on open" guard whenever the user switches to a
+  // different session or changes the load range. The next data arrival
+  // will then trigger one auto-scroll to the bottom.
+  useEffect(() => {
+    hasScrolledOnLoadRef.current = false;
+  }, [sessionId, loadOptions]);
+
+  // One-time auto-scroll: when the first batch of conversations lands for
+  // the current sessionId/loadOptions combo, jump to the latest message.
+  // This is what a chat viewer should do on open — historical sessions
+  // previously stayed pinned at the top, forcing users to scroll manually.
+  useEffect(() => {
+    if (hasScrolledOnLoadRef.current) return;
+    if (!isExistingSession) return;
+    if (conversationCount === 0) return;
+    hasScrolledOnLoadRef.current = true;
+    scrollToBottomSettled(8);
+  }, [conversationCount, isExistingSession, scrollToBottomSettled]);
 
   useEffect(() => {
     if (!isExistingSession) return;
