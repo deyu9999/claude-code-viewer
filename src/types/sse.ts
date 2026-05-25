@@ -22,6 +22,11 @@ export type SSEEventDeclaration = {
   agentSessionChanged: {
     projectId: string;
     agentSessionId: string;
+    // Set when the subagent file lives under the new-style nested layout
+    // ({project}/{parentSessionId}/subagents/agent-*.jsonl). Lets the frontend
+    // also invalidate the subagent list query for that parent session, so a
+    // newly-spawned subagent shows up without a manual refresh.
+    parentSessionId?: string;
   };
 
   sessionProcessChanged: {

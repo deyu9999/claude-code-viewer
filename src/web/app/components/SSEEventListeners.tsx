@@ -41,8 +41,8 @@ export const SSEEventListeners: FC<PropsWithChildren> = ({ children }) => {
   });
 
   useServerEventListener("agentSessionChanged", (event) => {
-    // Invalidate the specific agent-session query for this agentSessionId
-    // New query key pattern: ["projects", projectId, "agent-sessions", agentId]
+    // Invalidate the specific agent-session query for this agentSessionId.
+    // Query key pattern: ["projects", projectId, "agent-sessions", agentId, ...]
     void queryClient.invalidateQueries({
       predicate: (query) => {
         const queryKey = query.queryKey;
@@ -55,6 +55,27 @@ export const SSEEventListeners: FC<PropsWithChildren> = ({ children }) => {
         );
       },
     });
+
+    // Also invalidate the agent-session list for the parent session, so a
+    // newly-spawned subagent shows up in the right-panel Agents list
+    // without requiring a manual refresh.
+    // List query key: ["projects", projectId, "sessions", sessionId, "agent-sessions"]
+    if (event.parentSessionId !== undefined) {
+      const parentSessionId = event.parentSessionId;
+      void queryClient.invalidateQueries({
+        predicate: (query) => {
+          const k = query.queryKey;
+          return (
+            Array.isArray(k) &&
+            k[0] === "projects" &&
+            k[1] === event.projectId &&
+            k[2] === "sessions" &&
+            k[3] === parentSessionId &&
+            k[4] === "agent-sessions"
+          );
+        },
+      });
+    }
   });
 
   useServerEventListener("permissionRequested", () => {

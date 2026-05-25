@@ -20,6 +20,7 @@ export type InternalEventDeclaration = {
   agentSessionChanged: {
     projectId: string;
     agentSessionId: string;
+    parentSessionId?: string;
   };
 
   sessionProcessChanged: {

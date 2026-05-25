@@ -42,7 +42,12 @@ export class FileWatcherService extends Context.Tag("FileWatcherService")<
       const scheduleDebouncedEmit = (
         debounceKey: string,
         payload:
-          | { type: "agent"; projectId: string; agentSessionId: string }
+          | {
+              type: "agent";
+              projectId: string;
+              agentSessionId: string;
+              parentSessionId?: string;
+            }
           | { type: "session"; projectId: string; sessionId: string },
       ) =>
         Effect.gen(function* () {
@@ -55,6 +60,9 @@ export class FileWatcherService extends Context.Tag("FileWatcherService")<
                 eventBus.emit("agentSessionChanged", {
                   projectId: payload.projectId,
                   agentSessionId: payload.agentSessionId,
+                  ...(payload.parentSessionId !== undefined
+                    ? { parentSessionId: payload.parentSessionId }
+                    : {}),
                 }),
               );
             } else {
@@ -107,6 +115,9 @@ export class FileWatcherService extends Context.Tag("FileWatcherService")<
               type: "agent",
               projectId: encodedProjectId,
               agentSessionId: parsed.agentSessionId,
+              ...(parsed.parentSessionId !== undefined
+                ? { parentSessionId: parsed.parentSessionId }
+                : {}),
             });
             return;
           }

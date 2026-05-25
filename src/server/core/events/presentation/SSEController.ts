@@ -48,6 +48,9 @@ const LayerImpl = Effect.gen(function* () {
           typeSafeSSE.writeSSE("agentSessionChanged", {
             projectId: event.projectId,
             agentSessionId: event.agentSessionId,
+            ...(event.parentSessionId !== undefined
+              ? { parentSessionId: event.parentSessionId }
+              : {}),
           }),
         );
       };
