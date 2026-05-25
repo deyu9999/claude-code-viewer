@@ -1,7 +1,7 @@
 import { Trans } from "@lingui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Eye, Loader2, MessageSquare, XCircle } from "lucide-react";
-import { type FC, useEffect, useRef, useState } from "react";
+import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import type { SidechainConversation } from "@/lib/conversation-schema";
 import type { ToolResultContent } from "@/lib/conversation-schema/content/ToolResultContentSchema";
@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/web/components/ui/dialog";
+import { Switch } from "@/web/components/ui/switch";
 import { agentSessionQuery } from "@/web/lib/api/queries";
 import { buildTaskModalConversations } from "./buildTaskModalConversations";
 import { ConversationList } from "./ConversationList";
@@ -155,6 +156,16 @@ export const TaskModal: FC<TaskModalProps> = ({
     (c) => c.type === "user" || c.type === "assistant" || c.type === "system",
   );
 
+  const [followScroll, setFollowScroll] = useState(true);
+
+  const scrollToBottomNow = useCallback(() => {
+    requestAnimationFrame(() => {
+      const target = scrollContainerRef.current;
+      if (target === null) return;
+      target.scrollTo({ top: target.scrollHeight, behavior: "auto" });
+    });
+  }, []);
+
   // One-time scroll-to-bottom when the task modal opens and the subagent
   // conversation finishes loading. Reset on close so reopening jumps to
   // the latest again (which may have advanced if the subagent kept running).
@@ -168,12 +179,25 @@ export const TaskModal: FC<TaskModalProps> = ({
     if (conversations.length === 0) return;
     if (scrollContainerRef.current === null) return;
     hasScrolledOnLoadRef.current = true;
-    requestAnimationFrame(() => {
-      const target = scrollContainerRef.current;
-      if (target === null) return;
-      target.scrollTo({ top: target.scrollHeight, behavior: "auto" });
-    });
-  }, [isOpen, conversations.length]);
+    scrollToBottomNow();
+  }, [isOpen, conversations.length, scrollToBottomNow]);
+
+  // Follow-on-update: pull down when new messages arrive (SSE refetch, etc.)
+  // and follow toggle is on. Skips first paint so we don't double-fire with
+  // the one-time effect above.
+  const previousCountRef = useRef(0);
+  useEffect(() => {
+    if (!isOpen) {
+      previousCountRef.current = 0;
+      return;
+    }
+    if (conversations.length === previousCountRef.current) return;
+    const isFirstPaint = previousCountRef.current === 0;
+    previousCountRef.current = conversations.length;
+    if (isFirstPaint) return;
+    if (!followScroll) return;
+    scrollToBottomNow();
+  }, [isOpen, conversations.length, followScroll, scrollToBottomNow]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -221,6 +245,10 @@ export const TaskModal: FC<TaskModalProps> = ({
                     values={{ count: conversations.length }}
                   />
                 </span>
+                <div className="flex items-center gap-1.5 ml-auto select-none">
+                  <Switch checked={followScroll} onCheckedChange={setFollowScroll} />
+                  <span>Follow updates</span>
+                </div>
               </DialogDescription>
             </div>
           </div>

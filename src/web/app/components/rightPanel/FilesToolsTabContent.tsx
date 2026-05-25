@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/web/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/web/components/ui/popover";
+import { Switch } from "@/web/components/ui/switch";
 import { agentSessionListQuery, agentSessionQuery } from "@/web/lib/api/queries";
 import { cn } from "@/web/utils";
 import { ConversationList } from "../../projects/[projectId]/sessions/[sessionId]/components/conversationList/ConversationList";
@@ -293,6 +294,19 @@ const AgentSessionDialog: FC<{
 
   const conversations = data?.conversations ?? [];
 
+  // "Follow updates" toggle: when the subagent jsonl changes and TanStack
+  // refetches, scroll to bottom if the user has follow enabled. Defaults to
+  // on so a user opening a still-running subagent sees new messages stream in.
+  const [followScroll, setFollowScroll] = useState(true);
+
+  const scrollToBottomNow = useCallback(() => {
+    requestAnimationFrame(() => {
+      const target = scrollContainerRef.current;
+      if (target === null) return;
+      target.scrollTo({ top: target.scrollHeight, behavior: "auto" });
+    });
+  }, []);
+
   // One-time scroll-to-bottom when the modal opens and conversations load.
   // Reset whenever the modal reopens or the agent changes so subsequent
   // opens also land at the latest message.
@@ -304,16 +318,27 @@ const AgentSessionDialog: FC<{
     if (!isOpen) return;
     if (hasScrolledOnLoadRef.current) return;
     if (conversations.length === 0) return;
-    const el = scrollContainerRef.current;
-    if (el === null) return;
+    if (scrollContainerRef.current === null) return;
     hasScrolledOnLoadRef.current = true;
-    // Run after layout so the just-rendered messages contribute to scrollHeight.
-    requestAnimationFrame(() => {
-      const target = scrollContainerRef.current;
-      if (target === null) return;
-      target.scrollTo({ top: target.scrollHeight, behavior: "auto" });
-    });
-  }, [isOpen, conversations.length]);
+    scrollToBottomNow();
+  }, [isOpen, conversations.length, scrollToBottomNow]);
+
+  // Follow-on-update: when SSE invalidation brings in new messages, jump to
+  // bottom if follow is on. Skips the very first paint (handled by the
+  // one-time effect above) so we don't double-fire.
+  const previousCountRef = useRef(0);
+  useEffect(() => {
+    if (!isOpen) {
+      previousCountRef.current = 0;
+      return;
+    }
+    if (conversations.length === previousCountRef.current) return;
+    const isFirstPaint = previousCountRef.current === 0;
+    previousCountRef.current = conversations.length;
+    if (isFirstPaint) return;
+    if (!followScroll) return;
+    scrollToBottomNow();
+  }, [isOpen, conversations.length, followScroll, scrollToBottomNow]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -346,6 +371,10 @@ const AgentSessionDialog: FC<{
                     values={{ count: conversations.length }}
                   />
                 </span>
+                <div className="flex items-center gap-1.5 ml-auto select-none">
+                  <Switch checked={followScroll} onCheckedChange={setFollowScroll} />
+                  <span>Follow updates</span>
+                </div>
               </DialogDescription>
             </div>
           </div>

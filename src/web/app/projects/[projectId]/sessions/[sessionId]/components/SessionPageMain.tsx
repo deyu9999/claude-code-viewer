@@ -72,6 +72,8 @@ export const SessionPageMain: FC<SessionPageMainProps> = (props) => {
         sessionData={null}
         loadOptions={DEFAULT_LOAD_OPTIONS}
         setLoadOptions={() => {}}
+        followScroll={true}
+        setFollowScroll={() => {}}
         onMobileMenuOpen={props.onMobileMenuOpen}
       />
     );
@@ -82,6 +84,9 @@ export const SessionPageMain: FC<SessionPageMainProps> = (props) => {
 
 const SessionPageMainWithData: FC<SessionPageMainProps & { sessionId: string }> = (props) => {
   const [loadOptions, setLoadOptions] = useState<SessionDetailQueryOptions>(DEFAULT_LOAD_OPTIONS);
+  // Auto-scroll on every update is the chat-app default. Users can flip
+  // this off when they want to read history without getting yanked.
+  const [followScroll, setFollowScroll] = useState(true);
   const sessionData = useSession(props.projectId, props.sessionId, loadOptions);
   return (
     <SessionPageMainContent
@@ -90,6 +95,8 @@ const SessionPageMainWithData: FC<SessionPageMainProps & { sessionId: string }> 
       sessionData={sessionData}
       loadOptions={loadOptions}
       setLoadOptions={setLoadOptions}
+      followScroll={followScroll}
+      setFollowScroll={setFollowScroll}
       onMobileMenuOpen={props.onMobileMenuOpen}
     />
   );
@@ -101,6 +108,8 @@ const SessionPageMainContent: FC<
     sessionData: SessionData | null;
     loadOptions: SessionDetailQueryOptions;
     setLoadOptions: (next: SessionDetailQueryOptions) => void;
+    followScroll: boolean;
+    setFollowScroll: (next: boolean) => void;
   }
 > = ({
   projectId,
@@ -110,6 +119,8 @@ const SessionPageMainContent: FC<
   sessionData,
   loadOptions,
   setLoadOptions,
+  followScroll,
+  setFollowScroll,
   onMobileMenuOpen,
 }) => {
   const navigate = useNavigate();
@@ -307,20 +318,19 @@ const SessionPageMainContent: FC<
 
   useEffect(() => {
     if (!isExistingSession) return;
-    if (effectiveSessionStatus === "running" && conversationCount !== previousConversationLength) {
-      if (!isNearBottomRef.current) {
-        setPreviousConversationLength(conversationCount);
-        return;
-      }
-
-      setPreviousConversationLength(conversationCount);
+    if (conversationCount === previousConversationLength) return;
+    setPreviousConversationLength(conversationCount);
+    // Follow toggle is the explicit user intent — if on, scroll to bottom on
+    // every update (SSE refresh, manual reload, etc.). The previous "running &&
+    // near bottom" heuristic was opaque and broke for historical sessions.
+    if (followScroll) {
       scrollToBottomSettled(6);
     }
   }, [
     conversationCount,
     isExistingSession,
-    effectiveSessionStatus,
     previousConversationLength,
+    followScroll,
     scrollToBottomSettled,
   ]);
 
@@ -706,6 +716,8 @@ const SessionPageMainContent: FC<
             options={loadOptions}
             onChange={setLoadOptions}
             pagination={sessionData?.pagination ?? null}
+            followScroll={followScroll}
+            onFollowScrollChange={setFollowScroll}
           />
         )}
 

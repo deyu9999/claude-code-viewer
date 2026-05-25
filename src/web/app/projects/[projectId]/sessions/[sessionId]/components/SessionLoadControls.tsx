@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/web/components/ui/select";
+import { Switch } from "@/web/components/ui/switch";
 import type { SessionDetailQueryOptions } from "@/web/lib/api/queries";
 
 export type SessionPaginationInfo = {
@@ -49,9 +50,17 @@ type Props = {
   options: SessionDetailQueryOptions;
   onChange: (next: SessionDetailQueryOptions) => void;
   pagination: SessionPaginationInfo;
+  followScroll: boolean;
+  onFollowScrollChange: (next: boolean) => void;
 };
 
-export const SessionLoadControls: FC<Props> = ({ options, onChange, pagination }) => {
+export const SessionLoadControls: FC<Props> = ({
+  options,
+  onChange,
+  pagination,
+  followScroll,
+  onFollowScrollChange,
+}) => {
   const preset = optionsToPreset(options);
   const [rangeOpen, setRangeOpen] = useState(preset === "range");
   const [pendingSince, setPendingSince] = useState(toLocalDatetimeInput(options.since));
@@ -137,6 +146,11 @@ export const SessionLoadControls: FC<Props> = ({ options, onChange, pagination }
             Load earlier
           </Button>
         )}
+
+        <div className="flex items-center gap-1.5 ml-auto select-none">
+          <Switch checked={followScroll} onCheckedChange={onFollowScrollChange} />
+          <span className="text-muted-foreground">Follow updates</span>
+        </div>
       </div>
 
       {rangeOpen && (
