@@ -83,15 +83,31 @@ const projectRoutes = Effect.gen(function* () {
       /**
        * Sessions
        */
-      .get("/:projectId/sessions/:sessionId", async (c) => {
-        const projectId = c.req.param("projectId");
-        const sessionId = c.req.param("sessionId");
-        const response = await effectToResponse(
-          c,
-          sessionController.getSession({ projectId, sessionId }).pipe(Effect.provide(runtime)),
-        );
-        return response;
-      })
+      .get(
+        "/:projectId/sessions/:sessionId",
+        zValidator(
+          "query",
+          z.object({
+            // Load only the last N events (cheap on multi-MB jsonl files).
+            tail: z.coerce.number().int().positive().optional(),
+            // ISO 8601 timestamps; filter conversations to [since, until].
+            since: z.string().optional(),
+            until: z.string().optional(),
+          }),
+        ),
+        async (c) => {
+          const projectId = c.req.param("projectId");
+          const sessionId = c.req.param("sessionId");
+          const { tail, since, until } = c.req.valid("query");
+          const response = await effectToResponse(
+            c,
+            sessionController
+              .getSession({ projectId, sessionId, tail, since, until })
+              .pipe(Effect.provide(runtime)),
+          );
+          return response;
+        },
+      )
       .get("/:projectId/sessions/:sessionId/export", async (c) => {
         const projectId = c.req.param("projectId");
         const sessionId = c.req.param("sessionId");

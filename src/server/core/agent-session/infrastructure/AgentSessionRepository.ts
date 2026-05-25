@@ -69,7 +69,10 @@ const LayerImpl = Effect.gen(function* () {
   const listAgentSessionsForSession = (
     projectId: string,
     sessionId: string,
-  ): Effect.Effect<{ agentId: string; firstMessage: string | null }[], Error> =>
+  ): Effect.Effect<
+    { agentId: string; firstMessage: string | null; firstTimestamp: string | null }[],
+    Error
+  > =>
     Effect.gen(function* () {
       const projectPath = decodeProjectId(projectId);
 
@@ -78,11 +81,21 @@ const LayerImpl = Effect.gen(function* () {
       if (!validateProjectPath(projectPath, claudeProjectsDirPath)) {
         return yield* Effect.fail(new Error("Invalid project path: outside allowed directory"));
       }
-      const results: { agentId: string; firstMessage: string | null }[] = [];
+      const results: {
+        agentId: string;
+        firstMessage: string | null;
+        firstTimestamp: string | null;
+      }[] = [];
 
       const extractAgentId = (filename: string): string | null => {
         const match = /^agent-(.+)\.jsonl$/.exec(filename);
         return match ? (match[1] ?? null) : null;
+      };
+
+      const timestampSchema = z.object({ timestamp: z.string() });
+      const extractTimestamp = (conv: unknown): string | null => {
+        const parsed = timestampSchema.safeParse(conv);
+        return parsed.success ? parsed.data.timestamp : null;
       };
 
       const processFile = (filePath: string, filename: string): Effect.Effect<void, Error> =>
@@ -98,9 +111,10 @@ const LayerImpl = Effect.gen(function* () {
             const conversations = parseJsonl(firstLine);
             const firstConv = conversations[0];
             const firstMessage = firstConv ? extractFirstUserText(firstConv) : null;
-            results.push({ agentId, firstMessage });
+            const firstTimestamp = extractTimestamp(firstConv);
+            results.push({ agentId, firstMessage, firstTimestamp });
           } catch {
-            results.push({ agentId, firstMessage: null });
+            results.push({ agentId, firstMessage: null, firstTimestamp: null });
           }
         });
 
@@ -151,6 +165,15 @@ const LayerImpl = Effect.gen(function* () {
         }
       }
 
+      // Sort by firstTimestamp DESC (newest spawned subagent first).
+      // Entries without a timestamp sink to the end.
+      results.sort((a, b) => {
+        if (a.firstTimestamp === null && b.firstTimestamp === null) return 0;
+        if (a.firstTimestamp === null) return 1;
+        if (b.firstTimestamp === null) return -1;
+        return b.firstTimestamp.localeCompare(a.firstTimestamp);
+      });
+
       return results;
     });
 
@@ -171,7 +194,10 @@ export class AgentSessionRepository extends Context.Tag("AgentSessionRepository"
     readonly listAgentSessionsForSession: (
       projectId: string,
       sessionId: string,
-    ) => Effect.Effect<{ agentId: string; firstMessage: string | null }[], Error>;
+    ) => Effect.Effect<
+      { agentId: string; firstMessage: string | null; firstTimestamp: string | null }[],
+      Error
+    >;
   }
 >() {
   static Live = Layer.effect(this, LayerImpl);

@@ -32,6 +32,7 @@ import { useQuestionRequests } from "@/web/hooks/useQuestionRequests";
 import { useSchedulerJobs } from "@/web/hooks/useScheduler";
 import { useTaskNotifications } from "@/web/hooks/useTaskNotifications";
 import { honoClient } from "@/web/lib/api/client";
+import type { SessionDetailQueryOptions } from "@/web/lib/api/queries";
 import { cn } from "@/web/utils";
 import { useProject } from "../../../hooks/useProject";
 import { resolveSessionTitle } from "../../../services/firstCommandToTitle";
@@ -45,8 +46,13 @@ import { ChatActionMenu } from "./resumeChat/ChatActionMenu";
 import { ContinueChat } from "./resumeChat/ContinueChat";
 import { ResumeChat } from "./resumeChat/ResumeChat";
 import { StartNewChat } from "./resumeChat/StartNewChat";
+import { SessionLoadControls } from "./SessionLoadControls";
 import { DeleteSessionDialog } from "./sessionSidebar/DeleteSessionDialog";
 import { getSessionStatusBadgeProps } from "./sessionStatusBadge";
+
+// Default: only load the most recent 200 events. Keeps first paint snappy
+// even on multi-MB jsonl files. Users can widen via SessionLoadControls.
+const DEFAULT_LOAD_OPTIONS: SessionDetailQueryOptions = { tail: 200 };
 
 type SessionPageMainProps = {
   projectId: string;
@@ -64,6 +70,8 @@ export const SessionPageMain: FC<SessionPageMainProps> = (props) => {
       <SessionPageMainContent
         {...props}
         sessionData={null}
+        loadOptions={DEFAULT_LOAD_OPTIONS}
+        setLoadOptions={() => {}}
         onMobileMenuOpen={props.onMobileMenuOpen}
       />
     );
@@ -73,12 +81,15 @@ export const SessionPageMain: FC<SessionPageMainProps> = (props) => {
 };
 
 const SessionPageMainWithData: FC<SessionPageMainProps & { sessionId: string }> = (props) => {
-  const sessionData = useSession(props.projectId, props.sessionId);
+  const [loadOptions, setLoadOptions] = useState<SessionDetailQueryOptions>(DEFAULT_LOAD_OPTIONS);
+  const sessionData = useSession(props.projectId, props.sessionId, loadOptions);
   return (
     <SessionPageMainContent
       {...props}
       sessionId={props.sessionId}
       sessionData={sessionData}
+      loadOptions={loadOptions}
+      setLoadOptions={setLoadOptions}
       onMobileMenuOpen={props.onMobileMenuOpen}
     />
   );
@@ -88,8 +99,19 @@ const SessionPageMainContent: FC<
   SessionPageMainProps & {
     sessionId?: string;
     sessionData: SessionData | null;
+    loadOptions: SessionDetailQueryOptions;
+    setLoadOptions: (next: SessionDetailQueryOptions) => void;
   }
-> = ({ projectId, sessionId, projectPath, projectName, sessionData, onMobileMenuOpen }) => {
+> = ({
+  projectId,
+  sessionId,
+  projectPath,
+  projectName,
+  sessionData,
+  loadOptions,
+  setLoadOptions,
+  onMobileMenuOpen,
+}) => {
   const navigate = useNavigate();
   const conversations = sessionData?.conversations;
   const conversationCount = conversations?.length ?? 0;
@@ -656,6 +678,14 @@ const SessionPageMainContent: FC<
             )}
           </div>
         </header>
+
+        {isExistingSession && (
+          <SessionLoadControls
+            options={loadOptions}
+            onChange={setLoadOptions}
+            pagination={sessionData?.pagination ?? null}
+          />
+        )}
 
         <div
           ref={scrollContainerRef}

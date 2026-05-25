@@ -1,9 +1,15 @@
 import { useCallback, useMemo } from "react";
+import type { SessionDetailQueryOptions } from "@/web/lib/api/queries";
 import { useSessionQuery } from "./useSessionQuery";
 
-export const useSession = (projectId: string, sessionId: string) => {
-  const query = useSessionQuery(projectId, sessionId);
+export const useSession = (
+  projectId: string,
+  sessionId: string,
+  options?: SessionDetailQueryOptions,
+) => {
+  const query = useSessionQuery(projectId, sessionId, options);
   const session = query.data?.session;
+  const pagination = query.data?.pagination ?? null;
   if (session === undefined || session === null) {
     throw new Error("Session not found");
   }
@@ -45,5 +51,6 @@ export const useSession = (projectId: string, sessionId: string) => {
     session,
     conversations: session.conversations,
     getToolResult,
+    pagination,
   };
 };

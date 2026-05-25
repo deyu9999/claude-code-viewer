@@ -14,15 +14,25 @@ const LayerImpl = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const eventBus = yield* EventBus;
 
-  const getSession = (options: { projectId: string; sessionId: string }) =>
+  const getSession = (options: {
+    projectId: string;
+    sessionId: string;
+    tail?: number;
+    since?: string;
+    until?: string;
+  }) =>
     Effect.gen(function* () {
-      const { projectId, sessionId } = options;
+      const { projectId, sessionId, tail, since, until } = options;
 
-      const { session } = yield* sessionRepository.getSession(projectId, sessionId);
+      const { session, pagination } = yield* sessionRepository.getSession(projectId, sessionId, {
+        tail,
+        since,
+        until,
+      });
 
       return {
         status: 200,
-        response: { session },
+        response: { session, pagination },
       } as const satisfies ControllerResponse;
     });
 

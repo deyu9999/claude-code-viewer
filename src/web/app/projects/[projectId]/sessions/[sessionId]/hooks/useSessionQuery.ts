@@ -8,7 +8,7 @@ import {
   getVirtualMessage,
   removeVirtualMessage,
 } from "@/lib/virtual-messages/virtualMessageStore";
-import { sessionDetailQuery } from "@/web/lib/api/queries";
+import { sessionDetailQuery, type SessionDetailQueryOptions } from "@/web/lib/api/queries";
 
 const filterConversations = (
   conversations: ReadonlyArray<
@@ -16,13 +16,17 @@ const filterConversations = (
   >,
 ): Conversation[] => conversations.filter((c): c is Conversation => c.type !== "x-error");
 
-export const useSessionQuery = (projectId: string, sessionId: string) => {
+export const useSessionQuery = (
+  projectId: string,
+  sessionId: string,
+  options?: SessionDetailQueryOptions,
+) => {
   const { isConnected: isSSEConnected } = useAtomValue(sseAtom);
 
   const query = useSuspenseQuery({
-    queryKey: sessionDetailQuery(projectId, sessionId).queryKey,
+    queryKey: sessionDetailQuery(projectId, sessionId, options).queryKey,
     queryFn: async () => {
-      const result = await sessionDetailQuery(projectId, sessionId).queryFn();
+      const result = await sessionDetailQuery(projectId, sessionId, options).queryFn();
 
       const virtualMessage = getVirtualMessage(sessionId);
 
@@ -59,6 +63,7 @@ export const useSessionQuery = (projectId: string, sessionId: string) => {
               conversations: [virtualEntry],
               lastModifiedAt: virtualMessage.sentAt,
             },
+            pagination: null,
           };
         }
 

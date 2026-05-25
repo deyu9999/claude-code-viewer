@@ -78,14 +78,37 @@ export const latestSessionQuery = (projectId: string) =>
     },
   }) as const;
 
-export const sessionDetailQuery = (projectId: string, sessionId: string) =>
+export type SessionDetailQueryOptions = {
+  // Load only the last N events. undefined = load all.
+  tail?: number;
+  // ISO 8601 timestamps, inclusive range filter on conversation timestamps.
+  since?: string;
+  until?: string;
+};
+
+export const sessionDetailQuery = (
+  projectId: string,
+  sessionId: string,
+  options: SessionDetailQueryOptions = {},
+) =>
   ({
-    queryKey: ["projects", projectId, "sessions", sessionId],
+    queryKey: [
+      "projects",
+      projectId,
+      "sessions",
+      sessionId,
+      { tail: options.tail ?? null, since: options.since ?? null, until: options.until ?? null },
+    ],
     queryFn: async () => {
       const response = await honoClient.api.projects[":projectId"].sessions[":sessionId"].$get({
         param: {
           projectId,
           sessionId,
+        },
+        query: {
+          tail: options.tail === undefined ? undefined : String(options.tail),
+          since: options.since,
+          until: options.until,
         },
       });
 
