@@ -1,7 +1,7 @@
 import { Trans } from "@lingui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Eye, Loader2, MessageSquare, XCircle } from "lucide-react";
-import { type FC, useRef, useState } from "react";
+import { type FC, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import type { SidechainConversation } from "@/lib/conversation-schema";
 import type { ToolResultContent } from "@/lib/conversation-schema/content/ToolResultContentSchema";
@@ -154,6 +154,26 @@ export const TaskModal: FC<TaskModalProps> = ({
   const firstConversation = conversations.find(
     (c) => c.type === "user" || c.type === "assistant" || c.type === "system",
   );
+
+  // One-time scroll-to-bottom when the task modal opens and the subagent
+  // conversation finishes loading. Reset on close so reopening jumps to
+  // the latest again (which may have advanced if the subagent kept running).
+  const hasScrolledOnLoadRef = useRef(false);
+  useEffect(() => {
+    if (!isOpen) hasScrolledOnLoadRef.current = false;
+  }, [isOpen, agentId]);
+  useEffect(() => {
+    if (!isOpen) return;
+    if (hasScrolledOnLoadRef.current) return;
+    if (conversations.length === 0) return;
+    if (scrollContainerRef.current === null) return;
+    hasScrolledOnLoadRef.current = true;
+    requestAnimationFrame(() => {
+      const target = scrollContainerRef.current;
+      if (target === null) return;
+      target.scrollTo({ top: target.scrollHeight, behavior: "auto" });
+    });
+  }, [isOpen, conversations.length]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>

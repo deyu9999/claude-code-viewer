@@ -15,7 +15,7 @@ import {
   WrenchIcon,
   XCircle,
 } from "lucide-react";
-import { type FC, useCallback, useMemo, useRef, useState } from "react";
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { extractAllEditedFiles, extractToolCalls } from "@/lib/file-viewer";
 import { extractLatestTodos } from "@/lib/todo-viewer";
@@ -292,6 +292,28 @@ const AgentSessionDialog: FC<{
   });
 
   const conversations = data?.conversations ?? [];
+
+  // One-time scroll-to-bottom when the modal opens and conversations load.
+  // Reset whenever the modal reopens or the agent changes so subsequent
+  // opens also land at the latest message.
+  const hasScrolledOnLoadRef = useRef(false);
+  useEffect(() => {
+    if (!isOpen) hasScrolledOnLoadRef.current = false;
+  }, [isOpen, agentId]);
+  useEffect(() => {
+    if (!isOpen) return;
+    if (hasScrolledOnLoadRef.current) return;
+    if (conversations.length === 0) return;
+    const el = scrollContainerRef.current;
+    if (el === null) return;
+    hasScrolledOnLoadRef.current = true;
+    // Run after layout so the just-rendered messages contribute to scrollHeight.
+    requestAnimationFrame(() => {
+      const target = scrollContainerRef.current;
+      if (target === null) return;
+      target.scrollTo({ top: target.scrollHeight, behavior: "auto" });
+    });
+  }, [isOpen, conversations.length]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
