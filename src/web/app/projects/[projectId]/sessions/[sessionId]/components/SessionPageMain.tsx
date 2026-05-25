@@ -252,7 +252,6 @@ const SessionPageMainContent: FC<
     );
   }, [allSchedulerJobs, hasSessionId, projectId, sessionId]);
 
-  const [previousConversationLength, setPreviousConversationLength] = useState(0);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollSettleRafIdRef = useRef<number | null>(null);
@@ -316,23 +315,32 @@ const SessionPageMainContent: FC<
     scrollToBottomSettled(8);
   }, [conversationCount, isExistingSession, scrollToBottomSettled]);
 
+  // Follow-on-update: signature = (length + last-uuid). Length alone is
+  // unreliable because tail=200 keeps returning 200 conversations even as
+  // the file grows (oldest rolls off, newest enters). Comparing the trailing
+  // uuid catches that "200 entries but they're different entries" case.
+  const previousTailSignatureRef = useRef<string>("");
   useEffect(() => {
-    if (!isExistingSession) return;
-    if (conversationCount === previousConversationLength) return;
-    setPreviousConversationLength(conversationCount);
-    // Follow toggle is the explicit user intent — if on, scroll to bottom on
-    // every update (SSE refresh, manual reload, etc.). The previous "running &&
-    // near bottom" heuristic was opaque and broke for historical sessions.
+    if (!isExistingSession || conversations === undefined) return;
+    const last = conversations[conversations.length - 1];
+    const lastUuid = last !== undefined && "uuid" in last ? last.uuid : "none";
+    const signature = `${conversations.length}:${lastUuid}`;
+    const isFirstObservation = previousTailSignatureRef.current === "";
+    if (signature === previousTailSignatureRef.current) return;
+    previousTailSignatureRef.current = signature;
+    // First observation is handled by the one-time scroll-on-open effect —
+    // skip here to avoid scrolling twice.
+    if (isFirstObservation) return;
     if (followScroll) {
       scrollToBottomSettled(6);
     }
-  }, [
-    conversationCount,
-    isExistingSession,
-    previousConversationLength,
-    followScroll,
-    scrollToBottomSettled,
-  ]);
+  }, [conversations, conversationCount, isExistingSession, followScroll, scrollToBottomSettled]);
+
+  // Reset the follow-update signature when the session changes so the next
+  // session's first paint is treated as "first observation" again.
+  useEffect(() => {
+    previousTailSignatureRef.current = "";
+  }, [sessionId, loadOptions]);
 
   const handleScrollToTop = () => {
     const scrollContainer = scrollContainerRef.current;
