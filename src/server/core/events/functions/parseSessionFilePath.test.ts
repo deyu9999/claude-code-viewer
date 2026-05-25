@@ -117,4 +117,40 @@ describe("parseSessionFilePath", () => {
       });
     });
   });
+
+  describe("nested subagent files", () => {
+    it("parses nested subagent file with parentSessionId", () => {
+      // New layout: {project}/{parentSessionId}/subagents/agent-{id}.jsonl
+      const result = parseSessionFilePath(
+        "my-project/19e8046b-9185-45c2-863f-629341414774/subagents/agent-aaad1af.jsonl",
+      );
+      expect(result).toEqual({
+        type: "agent",
+        projectId: "my-project",
+        parentSessionId: "19e8046b-9185-45c2-863f-629341414774",
+        agentSessionId: "aaad1af",
+      });
+    });
+
+    it("nested subagent regex must take precedence over legacy agent regex", () => {
+      // Legacy would mistakenly produce projectId="my-project/sess-1/subagents".
+      // The fix keeps projectId as just "my-project".
+      const result = parseSessionFilePath("my-project/sess-1/subagents/agent-x.jsonl");
+      expect(result).toEqual({
+        type: "agent",
+        projectId: "my-project",
+        parentSessionId: "sess-1",
+        agentSessionId: "x",
+      });
+    });
+
+    it("legacy agent files still work (no /subagents/ in path)", () => {
+      const result = parseSessionFilePath("my-project/agent-legacy.jsonl");
+      expect(result).toEqual({
+        type: "agent",
+        projectId: "my-project",
+        agentSessionId: "legacy",
+      });
+    });
+  });
 });

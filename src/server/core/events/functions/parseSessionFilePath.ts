@@ -1,11 +1,22 @@
 import z from "zod";
 
 const sessionFileRegExp = /(?<projectId>.*?)\/(?<sessionId>.*?)\.jsonl$/;
+// New-style subagent files live under {project}/{parentSessionId}/subagents/agent-{id}.jsonl.
+// Checked before the legacy pattern so the projectId doesn't accidentally swallow
+// "{parentSessionId}/subagents" — that breaks SSE invalidation routing.
+const nestedAgentFileRegExp =
+  /(?<projectId>.*?)\/(?<parentSessionId>[^/]+)\/subagents\/agent-(?<agentSessionId>.*?)\.jsonl$/;
 const agentFileRegExp = /(?<projectId>.*?)\/agent-(?<agentSessionId>.*?)\.jsonl$/;
 
 const sessionFileGroupSchema = z.object({
   projectId: z.string(),
   sessionId: z.string(),
+});
+
+const nestedAgentFileGroupSchema = z.object({
+  projectId: z.string(),
+  parentSessionId: z.string(),
+  agentSessionId: z.string(),
 });
 
 const agentFileGroupSchema = z.object({
@@ -23,6 +34,8 @@ export type AgentFileMatch = {
   type: "agent";
   projectId: string;
   agentSessionId: string;
+  // Only set when the file was found in the new-style nested location.
+  parentSessionId?: string;
 };
 
 export type FileMatch = SessionFileMatch | AgentFileMatch | null;
@@ -35,7 +48,19 @@ export type FileMatch = SessionFileMatch | AgentFileMatch | null;
  * @returns FileMatch object with type and extracted IDs, or null if not a recognized file
  */
 export const parseSessionFilePath = (filePath: string): FileMatch => {
-  // Check for agent file first (more specific pattern)
+  // Check nested-layout subagent first (most specific).
+  const nestedMatch = filePath.match(nestedAgentFileRegExp);
+  const nestedGroups = nestedAgentFileGroupSchema.safeParse(nestedMatch?.groups);
+  if (nestedGroups.success) {
+    return {
+      type: "agent",
+      projectId: nestedGroups.data.projectId,
+      parentSessionId: nestedGroups.data.parentSessionId,
+      agentSessionId: nestedGroups.data.agentSessionId,
+    };
+  }
+
+  // Legacy flat agent file: {project}/agent-{id}.jsonl
   const agentMatch = filePath.match(agentFileRegExp);
   const agentGroups = agentFileGroupSchema.safeParse(agentMatch?.groups);
   if (agentGroups.success) {

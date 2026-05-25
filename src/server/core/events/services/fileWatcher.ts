@@ -1,7 +1,7 @@
 import { FileSystem, Path } from "@effect/platform";
 import { Context, Effect, Fiber, Layer, Ref, Stream } from "effect";
 import { ApplicationContext } from "../../platform/services/ApplicationContext.ts";
-import { encodeProjectIdFromSessionFilePath } from "../../project/functions/id.ts";
+import { encodeProjectId, encodeProjectIdFromSessionFilePath } from "../../project/functions/id.ts";
 import { parseSessionFilePath } from "../functions/parseSessionFilePath.ts";
 import { EventBus } from "./EventBus.ts";
 
@@ -88,10 +88,18 @@ export class FileWatcherService extends Context.Tag("FileWatcherService")<
             return;
           }
 
-          const fullPath = path.isAbsolute(changedPath)
-            ? changedPath
-            : path.join(claudeProjectsDirPath, changedPath);
-          const encodedProjectId = encodeProjectIdFromSessionFilePath(fullPath);
+          // For nested-layout subagents (parsed.parentSessionId set), parsed.projectId
+          // is the real project relative dir — using `getDirname(fullPath)` here would
+          // wrongly encode "{project}/{parentSessionId}/subagents" and break frontend
+          // SSE invalidation routing. Reconstruct the absolute project path instead.
+          const encodedProjectId =
+            parsed.type === "agent" && parsed.parentSessionId !== undefined
+              ? encodeProjectId(path.join(claudeProjectsDirPath, parsed.projectId))
+              : encodeProjectIdFromSessionFilePath(
+                  path.isAbsolute(changedPath)
+                    ? changedPath
+                    : path.join(claudeProjectsDirPath, changedPath),
+                );
 
           if (parsed.type === "agent") {
             const debounceKey = `${encodedProjectId}/agent-${parsed.agentSessionId}`;
