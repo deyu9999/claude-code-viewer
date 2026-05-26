@@ -9,6 +9,76 @@ import type { ExtendedConversation } from "../../types.ts";
 
 const SAFE_AGENT_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
+export type AgentSessionLoadOptions = {
+  tail?: number;
+  since?: string;
+  until?: string;
+};
+
+export type AgentSessionPagination = {
+  totalCount: number;
+  returnedCount: number;
+  hasMore: boolean;
+};
+
+export type AgentSessionResult = {
+  conversations: ExtendedConversation[];
+  pagination: AgentSessionPagination;
+};
+
+const tsSchema = z.object({ timestamp: z.string() });
+const tsOf = (c: ExtendedConversation): string | null => {
+  const r = tsSchema.safeParse(c);
+  return r.success ? r.data.timestamp : null;
+};
+
+// Mirrors SessionRepository.getSession's tail/range logic. Fast-path: when
+// only `tail` is set, slice raw lines before parseJsonl/Zod so multi-MB
+// subagent files (e.g. 18MB+ research-style agents) don't pay full parse cost.
+const loadConversations = (
+  content: string,
+  options: AgentSessionLoadOptions | undefined,
+): AgentSessionResult => {
+  const allLines = content.split("\n").filter((line) => line.trim());
+  const totalCount = allLines.length;
+  const { tail, since, until } = options ?? {};
+
+  let conversations: ExtendedConversation[];
+  let hasMore: boolean;
+
+  if (
+    tail !== undefined &&
+    tail > 0 &&
+    tail < totalCount &&
+    since === undefined &&
+    until === undefined
+  ) {
+    const tailLines = allLines.slice(allLines.length - tail);
+    conversations = parseJsonl(tailLines.join("\n"));
+    hasMore = true;
+  } else {
+    conversations = parseJsonl(allLines.join("\n"));
+    if (since !== undefined || until !== undefined) {
+      conversations = conversations.filter((c) => {
+        const ts = tsOf(c);
+        if (ts === null) return true;
+        if (since !== undefined && ts < since) return false;
+        if (until !== undefined && ts > until) return false;
+        return true;
+      });
+    }
+    if (tail !== undefined && tail > 0 && conversations.length > tail) {
+      conversations = conversations.slice(conversations.length - tail);
+    }
+    hasMore = conversations.length < totalCount;
+  }
+
+  return {
+    conversations,
+    pagination: { totalCount, returnedCount: conversations.length, hasMore },
+  };
+};
+
 const LayerImpl = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -23,7 +93,8 @@ const LayerImpl = Effect.gen(function* () {
     projectId: string,
     agentId: string,
     sessionId?: string,
-  ): Effect.Effect<ExtendedConversation[] | null, Error> =>
+    options?: AgentSessionLoadOptions,
+  ): Effect.Effect<AgentSessionResult | null, Error> =>
     Effect.gen(function* () {
       // Validate agentId to prevent path traversal
       if (!SAFE_AGENT_ID_PATTERN.test(agentId)) {
@@ -44,7 +115,7 @@ const LayerImpl = Effect.gen(function* () {
 
         if (yield* fs.exists(newPath)) {
           const content = yield* fs.readFileString(newPath);
-          return parseJsonl(content);
+          return loadConversations(content, options);
         }
       }
 
@@ -58,8 +129,7 @@ const LayerImpl = Effect.gen(function* () {
       }
 
       const content = yield* fs.readFileString(agentFilePath);
-      const conversations = parseJsonl(content);
-      return conversations;
+      return loadConversations(content, options);
     });
 
   /**
@@ -190,7 +260,8 @@ export class AgentSessionRepository extends Context.Tag("AgentSessionRepository"
       projectId: string,
       agentId: string,
       sessionId?: string,
-    ) => Effect.Effect<ExtendedConversation[] | null, Error>;
+      options?: AgentSessionLoadOptions,
+    ) => Effect.Effect<AgentSessionResult | null, Error>;
     readonly listAgentSessionsForSession: (
       projectId: string,
       sessionId: string,

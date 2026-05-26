@@ -15,10 +15,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/web/components/ui/dialog";
-import { Switch } from "@/web/components/ui/switch";
-import { agentSessionQuery } from "@/web/lib/api/queries";
+import { agentSessionQuery, type AgentSessionQueryOptions } from "@/web/lib/api/queries";
+import { SessionLoadControls } from "../SessionLoadControls";
 import { buildTaskModalConversations } from "./buildTaskModalConversations";
 import { ConversationList } from "./ConversationList";
+
+const SUBAGENT_DEFAULT_LOAD_OPTIONS: AgentSessionQueryOptions = { tail: 200 };
 
 type TaskModalProps = {
   prompt: string;
@@ -120,14 +122,18 @@ export const TaskModal: FC<TaskModalProps> = ({
   // 3. Modal is open
   const shouldFetchFromApi = isOpen && !hasLocalData && agentId !== undefined;
 
+  const [loadOptions, setLoadOptions] = useState<AgentSessionQueryOptions>(
+    SUBAGENT_DEFAULT_LOAD_OPTIONS,
+  );
   const { data, isLoading, error, refetch } = useQuery({
-    ...agentSessionQuery(projectId, agentId ?? "", sessionId),
+    ...agentSessionQuery(projectId, agentId ?? "", sessionId, loadOptions),
     enabled: shouldFetchFromApi,
     staleTime: 0,
   });
 
   // Determine which data source to use
   const apiConversations = data?.conversations ?? [];
+  const apiPagination = data?.pagination ?? null;
   const conversations = hasLocalData
     ? localSidechainConversations.map((original) => ({
         ...original,
@@ -245,14 +251,21 @@ export const TaskModal: FC<TaskModalProps> = ({
                     values={{ count: conversations.length }}
                   />
                 </span>
-                <div className="flex items-center gap-1.5 ml-auto select-none">
-                  <Switch checked={followScroll} onCheckedChange={setFollowScroll} />
-                  <span>Follow updates</span>
-                </div>
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
+        {/* Show load controls only when we're actually fetching from the API
+            — local-sidechain data has no pagination/tail concept. */}
+        {shouldFetchFromApi && (
+          <SessionLoadControls
+            options={loadOptions}
+            onChange={setLoadOptions}
+            pagination={apiPagination}
+            followScroll={followScroll}
+            onFollowScrollChange={setFollowScroll}
+          />
+        )}
         <div ref={scrollContainerRef} className="flex-1 overflow-auto px-6 py-4">
           {showLoading && (
             <div className="flex flex-col items-center justify-center h-full gap-4">

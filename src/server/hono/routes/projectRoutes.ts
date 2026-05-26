@@ -146,17 +146,28 @@ const projectRoutes = Effect.gen(function* () {
        */
       .get(
         "/:projectId/agent-sessions/:agentId",
-        zValidator("query", z.object({ sessionId: z.string().optional() })),
+        zValidator(
+          "query",
+          z.object({
+            sessionId: z.string().optional(),
+            tail: z.coerce.number().int().positive().optional(),
+            since: z.string().optional(),
+            until: z.string().optional(),
+          }),
+        ),
         async (c) => {
           const projectId = c.req.param("projectId");
           const agentId = c.req.param("agentId");
-          const { sessionId } = c.req.valid("query");
+          const { sessionId, tail, since, until } = c.req.valid("query");
           const response = await effectToResponse(
             c,
             agentSessionController.getAgentSession({
               projectId,
               agentId,
               sessionId,
+              tail,
+              since,
+              until,
             }),
           );
           return response;

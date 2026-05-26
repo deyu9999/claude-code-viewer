@@ -29,13 +29,21 @@ import {
   DialogTitle,
 } from "@/web/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/web/components/ui/popover";
-import { Switch } from "@/web/components/ui/switch";
-import { agentSessionListQuery, agentSessionQuery } from "@/web/lib/api/queries";
+import {
+  agentSessionListQuery,
+  agentSessionQuery,
+  type AgentSessionQueryOptions,
+} from "@/web/lib/api/queries";
 import { cn } from "@/web/utils";
 import { ConversationList } from "../../projects/[projectId]/sessions/[sessionId]/components/conversationList/ConversationList";
 import { FileContentDialog } from "../../projects/[projectId]/sessions/[sessionId]/components/conversationList/FileContentDialog";
+import { SessionLoadControls } from "../../projects/[projectId]/sessions/[sessionId]/components/SessionLoadControls";
 import { useSession } from "../../projects/[projectId]/sessions/[sessionId]/hooks/useSession";
 import { CollapsibleTodoSection } from "./common/CollapsibleTodoSection";
+
+// Match the main session viewer's default: load only the most recent 200
+// events so a multi-MB subagent jsonl opens fast.
+const SUBAGENT_DEFAULT_LOAD_OPTIONS: AgentSessionQueryOptions = { tail: 200 };
 
 type FilesToolsTabContentProps = {
   projectId: string;
@@ -286,13 +294,17 @@ const AgentSessionDialog: FC<{
   onOpenChange: (open: boolean) => void;
 }> = ({ projectId, sessionId, agentId, title, isOpen, onOpenChange }) => {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [loadOptions, setLoadOptions] = useState<AgentSessionQueryOptions>(
+    SUBAGENT_DEFAULT_LOAD_OPTIONS,
+  );
   const { data, isLoading, error, refetch } = useQuery({
-    ...agentSessionQuery(projectId, agentId, sessionId),
+    ...agentSessionQuery(projectId, agentId, sessionId, loadOptions),
     enabled: isOpen,
     staleTime: 0,
   });
 
   const conversations = data?.conversations ?? [];
+  const pagination = data?.pagination ?? null;
 
   // "Follow updates" toggle: when the subagent jsonl changes and TanStack
   // refetches, scroll to bottom if the user has follow enabled. Defaults to
@@ -371,14 +383,17 @@ const AgentSessionDialog: FC<{
                     values={{ count: conversations.length }}
                   />
                 </span>
-                <div className="flex items-center gap-1.5 ml-auto select-none">
-                  <Switch checked={followScroll} onCheckedChange={setFollowScroll} />
-                  <span>Follow updates</span>
-                </div>
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
+        <SessionLoadControls
+          options={loadOptions}
+          onChange={setLoadOptions}
+          pagination={pagination}
+          followScroll={followScroll}
+          onFollowScrollChange={setFollowScroll}
+        />
         <div ref={scrollContainerRef} className="flex-1 overflow-auto px-6 py-4">
           {isLoading && (
             <div className="flex flex-col items-center justify-center h-full gap-4">

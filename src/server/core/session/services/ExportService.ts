@@ -1047,8 +1047,10 @@ export const generateSessionHtml = (
 
       for (const sess of loadedSessions) {
         if (sess) {
-          // Verify items are valid conversations (filter out unknowns if any)
-          const validConvs = sess.filter(
+          // Verify items are valid conversations (filter out unknowns if any).
+          // sess shape changed to { conversations, pagination } when subagent
+          // tail/range loading was added — read .conversations explicitly.
+          const validConvs = sess.conversations.filter(
             (c): c is Conversation =>
               c.type === "user" || c.type === "assistant" || c.type === "system",
           );

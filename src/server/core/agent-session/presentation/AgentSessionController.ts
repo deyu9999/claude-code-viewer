@@ -10,23 +10,33 @@ const LayerImpl = Effect.gen(function* () {
    * Get agent session by agentId.
    * Directly reads agent-${agentId}.jsonl file without mapping service.
    */
-  const getAgentSession = (params: { projectId: string; agentId: string; sessionId?: string }) =>
+  const getAgentSession = (params: {
+    projectId: string;
+    agentId: string;
+    sessionId?: string;
+    tail?: number;
+    since?: string;
+    until?: string;
+  }) =>
     Effect.gen(function* () {
-      const { projectId, agentId, sessionId } = params;
+      const { projectId, agentId, sessionId, tail, since, until } = params;
 
-      // Read conversations directly using agentId
-      const conversations = yield* repository.getAgentSessionByAgentId(
-        projectId,
-        agentId,
-        sessionId,
-      );
+      // Read conversations directly using agentId. Pass through tail/range
+      // options so the modal can request only the latest N events when
+      // viewing a multi-MB subagent jsonl.
+      const result = yield* repository.getAgentSessionByAgentId(projectId, agentId, sessionId, {
+        tail,
+        since,
+        until,
+      });
 
-      if (conversations === null) {
+      if (result === null) {
         return {
           status: 200,
           response: {
             agentSessionId: null,
             conversations: [],
+            pagination: null,
           },
         } as const satisfies ControllerResponse;
       }
@@ -35,7 +45,8 @@ const LayerImpl = Effect.gen(function* () {
         status: 200,
         response: {
           agentSessionId: agentId,
-          conversations,
+          conversations: result.conversations,
+          pagination: result.pagination,
         },
       } as const satisfies ControllerResponse;
     });

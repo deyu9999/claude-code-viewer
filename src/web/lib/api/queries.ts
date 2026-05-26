@@ -326,15 +326,38 @@ export const agentSessionListQuery = (projectId: string, sessionId: string) =>
     },
   }) as const;
 
-export const agentSessionQuery = (projectId: string, agentId: string, sessionId?: string) =>
+export type AgentSessionQueryOptions = {
+  tail?: number;
+  since?: string;
+  until?: string;
+};
+
+export const agentSessionQuery = (
+  projectId: string,
+  agentId: string,
+  sessionId?: string,
+  options: AgentSessionQueryOptions = {},
+) =>
   ({
-    queryKey: ["projects", projectId, "agent-sessions", agentId, sessionId],
+    queryKey: [
+      "projects",
+      projectId,
+      "agent-sessions",
+      agentId,
+      sessionId,
+      { tail: options.tail ?? null, since: options.since ?? null, until: options.until ?? null },
+    ],
     queryFn: async () => {
       const response = await honoClient.api.projects[":projectId"]["agent-sessions"][
         ":agentId"
       ].$get({
         param: { projectId, agentId },
-        query: { sessionId },
+        query: {
+          sessionId,
+          tail: options.tail === undefined ? undefined : String(options.tail),
+          since: options.since,
+          until: options.until,
+        },
       });
 
       if (!response.ok) {
