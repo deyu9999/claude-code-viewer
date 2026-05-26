@@ -303,7 +303,9 @@ const AgentSessionDialog: FC<{
     staleTime: 0,
   });
 
-  const conversations = data?.conversations ?? [];
+  // Memoize so the empty-array fallback doesn't allocate a fresh [] every
+  // render — keeps the follow-update effect's dependency stable.
+  const conversations = useMemo(() => data?.conversations ?? [], [data]);
   const pagination = data?.pagination ?? null;
 
   // "Follow updates" toggle: when the subagent jsonl changes and TanStack
@@ -335,22 +337,28 @@ const AgentSessionDialog: FC<{
     scrollToBottomNow();
   }, [isOpen, conversations.length, scrollToBottomNow]);
 
-  // Follow-on-update: when SSE invalidation brings in new messages, jump to
-  // bottom if follow is on. Skips the very first paint (handled by the
-  // one-time effect above) so we don't double-fire.
-  const previousCountRef = useRef(0);
+  // Follow-on-update: signature = (length + last-uuid). Length alone is
+  // unreliable now that tail=200 caps the returned array — a growing file
+  // still returns "200 entries" each refetch but with a different trailing
+  // entry. Skip the first observation so we don't double-fire with the
+  // scroll-on-open effect.
+  const previousSignatureRef = useRef<string>("");
   useEffect(() => {
     if (!isOpen) {
-      previousCountRef.current = 0;
+      previousSignatureRef.current = "";
       return;
     }
-    if (conversations.length === previousCountRef.current) return;
-    const isFirstPaint = previousCountRef.current === 0;
-    previousCountRef.current = conversations.length;
-    if (isFirstPaint) return;
+    if (conversations.length === 0) return;
+    const last = conversations[conversations.length - 1];
+    const lastUuid = last !== undefined && "uuid" in last ? last.uuid : "none";
+    const signature = `${conversations.length}:${lastUuid}`;
+    const isFirstObservation = previousSignatureRef.current === "";
+    if (signature === previousSignatureRef.current) return;
+    previousSignatureRef.current = signature;
+    if (isFirstObservation) return;
     if (!followScroll) return;
     scrollToBottomNow();
-  }, [isOpen, conversations.length, followScroll, scrollToBottomNow]);
+  }, [isOpen, conversations, followScroll, scrollToBottomNow]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>

@@ -1,7 +1,7 @@
 import { Trans } from "@lingui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Eye, Loader2, MessageSquare, XCircle } from "lucide-react";
-import { type FC, useCallback, useEffect, useRef, useState } from "react";
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import type { SidechainConversation } from "@/lib/conversation-schema";
 import type { ToolResultContent } from "@/lib/conversation-schema/content/ToolResultContentSchema";
@@ -112,8 +112,13 @@ export const TaskModal: FC<TaskModalProps> = ({
   // Fallback to prompt matching if agentId lookup failed
   const legacyConversation = localConversation ?? getSidechainConversationByPrompt(prompt);
 
-  const localSidechainConversations =
-    legacyConversation !== undefined ? getSidechainConversations(legacyConversation.uuid) : [];
+  // Memoized so downstream useMemos depending on it stay stable when nothing
+  // about the local sidechain lookup changed.
+  const localSidechainConversations = useMemo(
+    () =>
+      legacyConversation !== undefined ? getSidechainConversations(legacyConversation.uuid) : [],
+    [legacyConversation, getSidechainConversations],
+  );
   const hasLocalData = localSidechainConversations.length > 0;
 
   // Only fetch from API if:
@@ -131,15 +136,17 @@ export const TaskModal: FC<TaskModalProps> = ({
     staleTime: 0,
   });
 
-  // Determine which data source to use
-  const apiConversations = data?.conversations ?? [];
+  // Determine which data source to use. Memoize the final array so the
+  // follow-update effect has a stable dependency reference between renders.
   const apiPagination = data?.pagination ?? null;
-  const conversations = hasLocalData
-    ? localSidechainConversations.map((original) => ({
-        ...original,
-        isSidechain: false,
-      }))
-    : apiConversations;
+  const apiConversations = useMemo(() => data?.conversations ?? [], [data]);
+  const conversations = useMemo(
+    () =>
+      hasLocalData
+        ? localSidechainConversations.map((original) => ({ ...original, isSidechain: false }))
+        : apiConversations,
+    [hasLocalData, localSidechainConversations, apiConversations],
+  );
 
   const agentSessionId = hasLocalData ? undefined : data?.agentSessionId;
   const turnId = hasLocalData ? legacyConversation?.uuid : agentSessionId;
@@ -188,22 +195,27 @@ export const TaskModal: FC<TaskModalProps> = ({
     scrollToBottomNow();
   }, [isOpen, conversations.length, scrollToBottomNow]);
 
-  // Follow-on-update: pull down when new messages arrive (SSE refetch, etc.)
-  // and follow toggle is on. Skips first paint so we don't double-fire with
-  // the one-time effect above.
-  const previousCountRef = useRef(0);
+  // Follow-on-update: signature = (length + last-uuid). With tail=200 on,
+  // length is capped and doesn't change as the file grows — comparing the
+  // trailing uuid catches the real "new entries" case. Skip first
+  // observation to avoid double-firing with the scroll-on-open effect.
+  const previousSignatureRef = useRef<string>("");
   useEffect(() => {
     if (!isOpen) {
-      previousCountRef.current = 0;
+      previousSignatureRef.current = "";
       return;
     }
-    if (conversations.length === previousCountRef.current) return;
-    const isFirstPaint = previousCountRef.current === 0;
-    previousCountRef.current = conversations.length;
-    if (isFirstPaint) return;
+    if (conversations.length === 0) return;
+    const last = conversations[conversations.length - 1];
+    const lastUuid = last !== undefined && "uuid" in last ? last.uuid : "none";
+    const signature = `${conversations.length}:${lastUuid}`;
+    const isFirstObservation = previousSignatureRef.current === "";
+    if (signature === previousSignatureRef.current) return;
+    previousSignatureRef.current = signature;
+    if (isFirstObservation) return;
     if (!followScroll) return;
     scrollToBottomNow();
-  }, [isOpen, conversations.length, followScroll, scrollToBottomNow]);
+  }, [isOpen, conversations, followScroll, scrollToBottomNow]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
