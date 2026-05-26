@@ -64,6 +64,9 @@ export const ProjectSwitcher: FC<ProjectSwitcherProps> = ({
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/role-has-required-aria-props -- shadcn-ui Combobox pattern
           role="combobox"
           aria-expanded={open}
+          // Native title attribute shows the un-shortened path on hover —
+          // makes "is this the right project?" answerable without clicking.
+          title={resolvedPath}
           className="flex items-center gap-1.5 h-7 text-foreground/70 font-medium truncate hover:text-foreground transition-colors rounded px-2 hover:bg-muted/50"
         >
           <FolderIcon className="w-3.5 h-3.5 shrink-0 opacity-60" />
@@ -91,11 +94,14 @@ export const ProjectSwitcher: FC<ProjectSwitcherProps> = ({
                     value={path}
                     onSelect={() => handleSelect(project.id)}
                     className="gap-2"
+                    title={path}
                   >
                     <CheckIcon
                       className={cn("w-3.5 h-3.5 shrink-0", isActive ? "opacity-100" : "opacity-0")}
                     />
-                    <span className="truncate font-mono text-xs">{displayPath}</span>
+                    <span className="truncate font-mono text-xs" title={path}>
+                      {displayPath}
+                    </span>
                   </CommandItem>
                 );
               })}
