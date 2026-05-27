@@ -448,13 +448,48 @@ const AgentSessionDialog: FC<{
   );
 };
 
+/**
+ * Pull a short "name" out of the first user message — the first non-empty
+ * line, capped at 60 chars. Subagent jsonl files have no intrinsic agent
+ * name, so the prompt's first line is the closest thing to a human label.
+ */
+const extractAgentName = (firstMessage: string | null, agentId: string): string => {
+  if (firstMessage === null || firstMessage.trim() === "") {
+    return `Agent ${agentId.slice(0, 8)}`;
+  }
+  const firstLine = firstMessage.split("\n").find((l) => l.trim() !== "") ?? firstMessage;
+  const trimmed = firstLine.trim();
+  return trimmed.length > 60 ? `${trimmed.slice(0, 60)}...` : trimmed;
+};
+
+const formatAgentTime = (iso: string | null): string => {
+  if (iso === null || iso === "") return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const now = Date.now();
+  const diffMs = now - d.getTime();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  // Older than a week — show absolute date (locale-agnostic; rendered locally)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 const AgentSessionItem: FC<{
   agentId: string;
   firstMessage: string | null;
+  lastModifiedAt: string | null;
   onClick: () => void;
-}> = ({ agentId, firstMessage, onClick }) => {
-  const displayText = firstMessage ?? `Agent ${agentId.slice(0, 8)}`;
-  const truncated = displayText.length > 80 ? `${displayText.slice(0, 80)}...` : displayText;
+}> = ({ agentId, firstMessage, lastModifiedAt, onClick }) => {
+  const name = extractAgentName(firstMessage, agentId);
+  const time = formatAgentTime(lastModifiedAt);
+  // Tooltip carries the full first message so a hover shows everything
+  // even when the visible name is truncated.
+  const tooltipText = firstMessage ?? `Agent ${agentId}`;
 
   return (
     <Button
@@ -462,12 +497,16 @@ const AgentSessionItem: FC<{
       size="sm"
       className="w-full justify-start h-auto py-1.5 px-2 text-xs font-normal hover:bg-accent gap-2 rounded-md"
       onClick={onClick}
+      title={tooltipText}
     >
-      <BotIcon className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-      <span className="truncate text-left flex-1 text-xs">{truncated}</span>
-      <span className="text-[10px] text-muted-foreground/70 flex-shrink-0 bg-muted/50 px-1.5 py-0.5 rounded font-mono">
-        {agentId.slice(0, 8)}
-      </span>
+      <BotIcon className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground self-start mt-0.5" />
+      <div className="flex-1 min-w-0 text-left">
+        <div className="truncate text-xs">{name}</div>
+        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground/70">
+          <span className="font-mono bg-muted/50 px-1 py-0.5 rounded">{agentId.slice(0, 8)}</span>
+          {time !== "" && <span>{time}</span>}
+        </div>
+      </div>
     </Button>
   );
 };
@@ -766,6 +805,7 @@ export const FilesToolsTabContent: FC<FilesToolsTabContentProps> = ({ projectId,
                   key={agent.agentId}
                   agentId={agent.agentId}
                   firstMessage={agent.firstMessage}
+                  lastModifiedAt={agent.lastModifiedAt ?? null}
                   onClick={() => handleOpenAgent(agent.agentId)}
                 />
               ))}

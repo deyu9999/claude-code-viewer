@@ -140,7 +140,12 @@ const LayerImpl = Effect.gen(function* () {
     projectId: string,
     sessionId: string,
   ): Effect.Effect<
-    { agentId: string; firstMessage: string | null; firstTimestamp: string | null }[],
+    {
+      agentId: string;
+      firstMessage: string | null;
+      firstTimestamp: string | null;
+      lastModifiedAt: string | null;
+    }[],
     Error
   > =>
     Effect.gen(function* () {
@@ -155,6 +160,7 @@ const LayerImpl = Effect.gen(function* () {
         agentId: string;
         firstMessage: string | null;
         firstTimestamp: string | null;
+        lastModifiedAt: string | null;
       }[] = [];
 
       const extractAgentId = (filename: string): string | null => {
@@ -173,18 +179,34 @@ const LayerImpl = Effect.gen(function* () {
           const agentId = extractAgentId(filename);
           if (agentId === null) return;
 
+          // File mtime — fastest proxy for "last updated" without parsing
+          // the whole jsonl. Returned as ISO so the frontend can format
+          // it locally (relative or absolute).
+          const stat = yield* fs.stat(filePath).pipe(Effect.catchAll(() => Effect.succeed(null)));
+          const mtime = stat?.mtime;
+          const lastModifiedAt =
+            mtime !== undefined && mtime._tag === "Some" ? mtime.value.toISOString() : null;
+
           const content = yield* fs.readFileString(filePath);
           const firstLine = content.split("\n")[0];
-          if (firstLine === undefined || firstLine.trim() === "") return;
+          if (firstLine === undefined || firstLine.trim() === "") {
+            results.push({ agentId, firstMessage: null, firstTimestamp: null, lastModifiedAt });
+            return;
+          }
 
           try {
             const conversations = parseJsonl(firstLine);
             const firstConv = conversations[0];
             const firstMessage = firstConv ? extractFirstUserText(firstConv) : null;
             const firstTimestamp = extractTimestamp(firstConv);
-            results.push({ agentId, firstMessage, firstTimestamp });
+            results.push({ agentId, firstMessage, firstTimestamp, lastModifiedAt });
           } catch {
-            results.push({ agentId, firstMessage: null, firstTimestamp: null });
+            results.push({
+              agentId,
+              firstMessage: null,
+              firstTimestamp: null,
+              lastModifiedAt,
+            });
           }
         });
 
@@ -266,7 +288,12 @@ export class AgentSessionRepository extends Context.Tag("AgentSessionRepository"
       projectId: string,
       sessionId: string,
     ) => Effect.Effect<
-      { agentId: string; firstMessage: string | null; firstTimestamp: string | null }[],
+      {
+        agentId: string;
+        firstMessage: string | null;
+        firstTimestamp: string | null;
+        lastModifiedAt: string | null;
+      }[],
       Error
     >;
   }
